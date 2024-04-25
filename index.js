@@ -62,27 +62,7 @@ function putPixel(x, y, color) {
 // RAY TRACING
 
 function traceRay(origin, direction, minT, maxT) {
-  // find closest intersection (if any)
-  let closestT = Infinity;
-  let closestSphere = null;
-  for (let sphere of spheres) {
-    // see where ray hits this sphere (if at all)
-    const [t1, t2] = intersectRaySphere(
-      origin,
-      direction,
-      sphere,
-      1,
-      Infinity
-    );
-    if (t1 < closestT && t1 >= minT && t1 <= maxT) {
-      closestT = t1;
-      closestSphere = sphere;
-    }
-    if (t2 < closestT && t2 >= minT && t2 <= maxT) {
-      closestT = t2;
-      closestSphere = sphere;
-    }
-  }
+  let [closestT, closestSphere] = getNearestIntersection(origin, direction, minT, maxT);
 
   if (!closestSphere) return BACKGROUND_COLOR;
 
@@ -112,6 +92,31 @@ function intersectRaySphere(origin, direction, sphere) {
   return [t1, t2];
 }
 
+function getNearestIntersection(origin, direction, minT, maxT) {
+  // find closest intersection (if any)
+  let closestT = Infinity;
+  let closestSphere = null;
+  for (let sphere of spheres) {
+    // see where ray hits this sphere (if at all)
+    const [t1, t2] = intersectRaySphere(
+      origin,
+      direction,
+      sphere,
+      1,
+      Infinity
+    );
+    if (t1 < closestT && t1 >= minT && t1 <= maxT) {
+      closestT = t1;
+      closestSphere = sphere;
+    }
+    if (t2 < closestT && t2 >= minT && t2 <= maxT) {
+      closestT = t2;
+      closestSphere = sphere;
+    }
+  }
+  return [closestT, closestSphere];
+}
+
 function calculateLighting(point, normal) {
   let intensity = 0;
   for (const light of lights) {
@@ -124,6 +129,10 @@ function calculateLighting(point, normal) {
       } else {
         directionToLight = light.direction;
       }
+
+      // send ray in light direction, see if it hits something. if so, no light for you
+      let [_, closestSphere] = getNearestIntersection(point, directionToLight, 0.001, 1);
+      if (closestSphere) continue;
 
       const normalDotDirectionToLight = dot(normal, directionToLight);
 
