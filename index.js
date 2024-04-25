@@ -24,7 +24,7 @@ const lights = [
   { type: "directional", intensity: 0.2, direction: [1, 4, 4] },
 ];
 
-const cameraPosition = [0, 0, 0];
+const cameraPosition = [0, 0, -3];
 
 // RENDERING
 renderScene();
@@ -146,12 +146,11 @@ function calculateLighting(point, normal, viewport, specular) {
           (normalDotDirectionToLight / (mag(normal) * mag(directionToLight)));
       }
 
-      // specular reflection
       if (specular !== -1) {
-        var reflection = subtract(scale(normal, 2 * dot(normal, directionToLight)), directionToLight);
-        var reflectionDotViewport = dot(reflection, viewport);
+        const reflection = reflectRay(directionToLight, normal);
+        const reflectionDotViewport = dot(reflection,viewport);
         if (reflectionDotViewport > 0) {
-          intensity += light.intensity * Math.pow(reflectionDotViewport / (mag(reflection) * mag(viewport)), specular);
+          intensity += light.intensity * Math.pow((reflectionDotViewport / (mag(reflection) * mag(viewport))), specular);
         }
       }
     }
@@ -160,5 +159,5 @@ function calculateLighting(point, normal, viewport, specular) {
 }
 
 function reflectRay(ray, normal) {
-  return subtract(scale(scale(normal, dot(normal, ray)), 2), ray);
+  return subtract(scale(normal, 2 * dot(normal, ray)), ray);
 }
