@@ -15,6 +15,13 @@ const spheres = [
   { center: [0, -1, 3], radius: 1, color: [255, 0, 0] },
   { center: [2, 0, 4], radius: 1, color: [0, 0, 255] },
   { center: [-2, 0, 4], radius: 1, color: [0, 255, 0] },
+  { center: [0, -5001, 0], radius: 5000, color: [255, 255, 0] },
+];
+
+const lights = [
+  { type: "ambient", intensity: 0.2 },
+  { type: "point", intensity: 0.6, position: [2, 1, 0] },
+  { type: "directional", intensity: 0.2, direction: [1, 4, 4] },
 ];
 
 const cameraPosition = [0, 0, 0];
@@ -25,44 +32,12 @@ renderScene();
 function renderScene() {
   for (let x = -WINDOW_SIZE / 2; x < WINDOW_SIZE / 2; x++) {
     for (let y = -WINDOW_SIZE / 2; y < WINDOW_SIZE / 2; y++) {
-      const color = traceRay(x, y, 0, Infinity);
+      const viewportCoords = canvasToViewport(x, y);
+      const color = traceRay(cameraPosition, viewportCoords, 0, Infinity);
       putPixel(x, y, color);
     }
   }
   ctx.putImageData(imageData, 0, 0);
-}
-
-function traceRay(x, y, minT, maxT) {
-  // translate pixel to world coordinates
-  const viewportCoords = canvasToViewport(x, y);
-
-  // find closest intersection (if any)
-  let closestT = Infinity;
-  let closestSphere = null;
-  for (let sphere of spheres) {
-    // see where ray hits this sphere (if at all)
-    const [t1, t2] = intersectRaySphere(
-      cameraPosition,
-      viewportCoords,
-      sphere,
-      1,
-      Infinity,
-    );
-    if (t1 < closestT && t1 >= minT && t1 <= maxT) {
-      closestT = t1;
-      closestSphere = sphere;
-    }
-    if (t2 < closestT && t2 >= minT && t2 <= maxT) {
-      closestT = t2;
-      closestSphere = sphere;
-    }
-  }
-
-  let color = BACKGROUND_COLOR;
-  if (closestSphere) {
-    color = closestSphere.color;
-  }
-  return color;
 }
 
 function canvasToViewport(x, y) {
@@ -75,9 +50,52 @@ function conceptualCanvasToTrueCanvas(x, y) {
   return [x, y];
 }
 
+function putPixel(x, y, color) {
+  [x, y] = conceptualCanvasToTrueCanvas(x, y);
+  let pixelBufferIdx = y * WINDOW_SIZE * 4 + x * 4; // each pixel takes 4 array indices, r,g,b,a
+  pixels[pixelBufferIdx++] = color[0];
+  pixels[pixelBufferIdx++] = color[1];
+  pixels[pixelBufferIdx++] = color[2];
+  pixels[pixelBufferIdx] = 255;
+}
+
+// RAY TRACING
+
+function traceRay(origin, direction, minT, maxT) {
+  // find closest intersection (if any)
+  let closestT = Infinity;
+  let closestSphere = null;
+  for (let sphere of spheres) {
+    // see where ray hits this sphere (if at all)
+    const [t1, t2] = intersectRaySphere(
+      origin,
+      direction,
+      sphere,
+      1,
+      Infinity
+    );
+    if (t1 < closestT && t1 >= minT && t1 <= maxT) {
+      closestT = t1;
+      closestSphere = sphere;
+    }
+    if (t2 < closestT && t2 >= minT && t2 <= maxT) {
+      closestT = t2;
+      closestSphere = sphere;
+    }
+  }
+
+  if (!closestSphere) return BACKGROUND_COLOR;
+
+  const intersectionPoint = add(origin, scale(direction, closestT));
+  const normal = normalize(subtract(intersectionPoint, closestSphere.center));
+  const intensity = calculateLighting(intersectionPoint, normal);
+  const color = scale(closestSphere.color, intensity);
+  return color;
+}
+
 function intersectRaySphere(origin, direction, sphere) {
-  let t1 = t2 = Infinity;
-  
+  let t1 = (t2 = Infinity);
+
   const CO = subtract(origin, sphere.center);
 
   const a = dot(direction, direction);
@@ -90,15 +108,29 @@ function intersectRaySphere(origin, direction, sphere) {
     t1 = (-b + Math.sqrt(discriminant)) / (2 * a);
     t2 = (-b - Math.sqrt(discriminant)) / (2 * a);
   }
-  
+
   return [t1, t2];
 }
 
-function putPixel(x, y, color) {
-  [x, y] = conceptualCanvasToTrueCanvas(x, y);
-  let pixelBufferIdx = y * WINDOW_SIZE * 4 + x * 4; // each pixel takes 4 array indices, r,g,b,a
-  pixels[pixelBufferIdx++] = color[0];
-  pixels[pixelBufferIdx++] = color[1];
-  pixels[pixelBufferIdx++] = color[2];
-  pixels[pixelBufferIdx] = 255;
+function calculateLighting(point, normal) {
+  let intensity = 0;
+  for (const light of lights) {
+    if (light.type === "ambient") {
+      intensity += light.intensity;
+    } else {
+      let directionToLight;
+      if (light.type === "point") {
+        directionToLight = subtract(light.position, point);
+      } else {
+        directionToLight = light.direction;
+      }
+
+      const normalDotDirectionToLight = dot(normal, directionToLight);
+
+      if (normalDotDirectionToLight > 0) {
+        intensity += light.intensity * (normalDotDirectionToLight / (mag(normal) * mag(directionToLight)));
+      }
+    }
+  }
+  return intensity;
 }
