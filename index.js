@@ -2,6 +2,7 @@ const WINDOW_SIZE = 600;
 const VIEWPORT_SIZE = 1;
 const VIEWPORT_DISTANCE = 1;
 const BACKGROUND_COLOR = [255, 255, 255];
+const MAX_REFLECTIONS = 3;
 
 // CANVAS SETUP
 const canvas = document.querySelector("canvas");
@@ -12,10 +13,34 @@ const pixels = imageData.data;
 
 // SCENE
 const spheres = [
-  { center: [0, -1, 3], radius: 1, color: [255, 0, 0], specular: 500 },
-  { center: [2, 0, 4], radius: 1, color: [0, 0, 255], specular: 500 },
-  { center: [-2, 0, 4], radius: 1, color: [0, 255, 0], specular: 10 },
-  { center: [0, -5001, 0], radius: 5000, color: [255, 255, 0], specular: 1000 },
+  {
+    center: [0, -1, 3],
+    radius: 1,
+    color: [255, 0, 0],
+    specular: 500,
+    reflectiveness: 0.2,
+  },
+  {
+    center: [2, 0, 4],
+    radius: 1,
+    color: [0, 0, 255],
+    specular: 500,
+    reflectiveness: 0.3,
+  },
+  {
+    center: [-2, 0, 4],
+    radius: 1,
+    color: [0, 255, 0],
+    specular: 10,
+    reflectiveness: 0.4,
+  },
+  {
+    center: [0, -5001, 0],
+    radius: 5000,
+    color: [255, 255, 0],
+    specular: 1000,
+    reflectiveness: 0.5,
+  },
 ];
 
 const lights = [
@@ -33,7 +58,13 @@ function renderScene() {
   for (let x = -WINDOW_SIZE / 2; x < WINDOW_SIZE / 2; x++) {
     for (let y = -WINDOW_SIZE / 2; y < WINDOW_SIZE / 2; y++) {
       const viewportCoords = canvasToViewport(x, y);
-      const color = traceRay(cameraPosition, viewportCoords, 0, Infinity);
+      const color = traceRay(
+        cameraPosition,
+        viewportCoords,
+        0,
+        Infinity,
+        MAX_REFLECTIONS
+      );
       putPixel(x, y, color);
     }
   }
@@ -61,7 +92,7 @@ function putPixel(x, y, color) {
 
 // RAY TRACING
 
-function traceRay(origin, direction, minT, maxT) {
+function traceRay(origin, direction, minT, maxT, recursionDepth) {
   let [closestT, closestSphere] = getNearestIntersection(
     origin,
     direction,
@@ -73,9 +104,26 @@ function traceRay(origin, direction, minT, maxT) {
 
   const intersectionPoint = add(origin, scale(direction, closestT));
   const normal = normalize(subtract(intersectionPoint, closestSphere.center));
-  const intensity = calculateLighting(intersectionPoint, normal, scale(direction, -1), closestSphere.specular);
-  const color = scale(closestSphere.color, intensity);
-  return color;
+  const toViewport = scale(direction, -1);
+  const intensity = calculateLighting(
+    intersectionPoint,
+    normal,
+    toViewport,
+    closestSphere.specular
+  );
+  const localColor = scale(closestSphere.color, intensity);
+
+  // no reflections
+  if (recursionDepth <= 0 || closestSphere.reflectiveness <= 0)
+    return localColor;
+
+  // reflections
+  const reflection = reflectRay(toViewport, normal);
+  const reflectedColor = traceRay(intersectionPoint, reflection, 0.001, Infinity, recursionDepth - 1);
+  return add(
+    scale(localColor, (1 - closestSphere.reflectiveness)), 
+    scale(reflectedColor, closestSphere.reflectiveness)
+  );
 }
 
 function intersectRaySphere(origin, direction, sphere) {
@@ -148,9 +196,14 @@ function calculateLighting(point, normal, viewport, specular) {
 
       if (specular !== -1) {
         const reflection = reflectRay(directionToLight, normal);
-        const reflectionDotViewport = dot(reflection,viewport);
+        const reflectionDotViewport = dot(reflection, viewport);
         if (reflectionDotViewport > 0) {
-          intensity += light.intensity * Math.pow((reflectionDotViewport / (mag(reflection) * mag(viewport))), specular);
+          intensity +=
+            light.intensity *
+            Math.pow(
+              reflectionDotViewport / (mag(reflection) * mag(viewport)),
+              specular
+            );
         }
       }
     }
