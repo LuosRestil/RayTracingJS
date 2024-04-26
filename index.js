@@ -12,10 +12,10 @@ const pixels = imageData.data;
 
 // SCENE
 const spheres = [
-  { center: [0, -1, 3], radius: 1, color: [255, 0, 0] },
-  { center: [2, 0, 4], radius: 1, color: [0, 0, 255] },
-  { center: [-2, 0, 4], radius: 1, color: [0, 255, 0] },
-  { center: [0, -5001, 0], radius: 5000, color: [255, 255, 0] },
+  { center: [0, -1, 3], radius: 1, color: [255, 0, 0], specular: 500 },
+  { center: [2, 0, 4], radius: 1, color: [0, 0, 255], specular: 500 },
+  { center: [-2, 0, 4], radius: 1, color: [0, 255, 0], specular: 10 },
+  { center: [0, -5001, 0], radius: 5000, color: [255, 255, 0], specular: 1000 },
 ];
 
 const lights = [
@@ -24,7 +24,7 @@ const lights = [
   { type: "directional", intensity: 0.2, direction: [1, 4, 4] },
 ];
 
-const cameraPosition = [0, 0, 0];
+const cameraPosition = [0, 0, -3];
 
 // RENDERING
 renderScene();
@@ -62,13 +62,18 @@ function putPixel(x, y, color) {
 // RAY TRACING
 
 function traceRay(origin, direction, minT, maxT) {
-  let [closestT, closestSphere] = getNearestIntersection(origin, direction, minT, maxT);
+  let [closestT, closestSphere] = getNearestIntersection(
+    origin,
+    direction,
+    minT,
+    maxT
+  );
 
   if (!closestSphere) return BACKGROUND_COLOR;
 
   const intersectionPoint = add(origin, scale(direction, closestT));
   const normal = normalize(subtract(intersectionPoint, closestSphere.center));
-  const intensity = calculateLighting(intersectionPoint, normal);
+  const intensity = calculateLighting(intersectionPoint, normal, scale(direction, -1), closestSphere.specular);
   const color = scale(closestSphere.color, intensity);
   return color;
 }
@@ -98,13 +103,7 @@ function getNearestIntersection(origin, direction, minT, maxT) {
   let closestSphere = null;
   for (let sphere of spheres) {
     // see where ray hits this sphere (if at all)
-    const [t1, t2] = intersectRaySphere(
-      origin,
-      direction,
-      sphere,
-      1,
-      Infinity
-    );
+    const [t1, t2] = intersectRaySphere(origin, direction, sphere, 1, Infinity);
     if (t1 < closestT && t1 >= minT && t1 <= maxT) {
       closestT = t1;
       closestSphere = sphere;
@@ -117,7 +116,7 @@ function getNearestIntersection(origin, direction, minT, maxT) {
   return [closestT, closestSphere];
 }
 
-function calculateLighting(point, normal) {
+function calculateLighting(point, normal, viewport, specular) {
   let intensity = 0;
   for (const light of lights) {
     if (light.type === "ambient") {
@@ -131,15 +130,34 @@ function calculateLighting(point, normal) {
       }
 
       // send ray in light direction, see if it hits something. if so, no light for you
-      let [_, closestSphere] = getNearestIntersection(point, directionToLight, 0.001, 1);
+      let [_, closestSphere] = getNearestIntersection(
+        point,
+        directionToLight,
+        0.001,
+        1
+      );
       if (closestSphere) continue;
 
+      // diffuse reflection
       const normalDotDirectionToLight = dot(normal, directionToLight);
-
       if (normalDotDirectionToLight > 0) {
-        intensity += light.intensity * (normalDotDirectionToLight / (mag(normal) * mag(directionToLight)));
+        intensity +=
+          light.intensity *
+          (normalDotDirectionToLight / (mag(normal) * mag(directionToLight)));
+      }
+
+      if (specular !== -1) {
+        const reflection = reflectRay(directionToLight, normal);
+        const reflectionDotViewport = dot(reflection,viewport);
+        if (reflectionDotViewport > 0) {
+          intensity += light.intensity * Math.pow((reflectionDotViewport / (mag(reflection) * mag(viewport))), specular);
+        }
       }
     }
   }
   return intensity;
+}
+
+function reflectRay(ray, normal) {
+  return subtract(scale(normal, 2 * dot(normal, ray)), ray);
 }
