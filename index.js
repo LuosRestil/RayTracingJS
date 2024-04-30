@@ -52,7 +52,6 @@ const lights = [
 const cameraPosition = [0, 0, -3];
 
 // RENDERING
-renderScene();
 
 function renderScene() {
   for (let x = -WINDOW_SIZE / 2; x < WINDOW_SIZE / 2; x++) {
@@ -213,4 +212,42 @@ function calculateLighting(point, normal, viewport, specular) {
 
 function reflectRay(ray, normal) {
   return subtract(scale(normal, 2 * dot(normal, ray)), ray);
+}
+
+// Performance
+let frames = 0;
+let fps = 0;
+let elapsed = 0;
+let lastTime = 0;
+
+function calculateFps(timestamp) {
+  frames++;
+
+  const deltaTime = timestamp - lastTime;
+  lastTime = timestamp;
+  elapsed += deltaTime;
+
+  if (elapsed > 1000) {
+    fps = frames;
+    frames = 0;
+    elapsed -= 1000;
+  }
+}
+
+function renderFps() {
+  ctx.fillStyle = 'dodgerblue';
+  ctx.font = '24px monospace';
+  ctx.fillText('fps: ' + fps, 50, 50);
+}
+
+// Animation
+
+requestAnimationFrame(loop);
+
+function loop(timestamp) {
+  requestAnimationFrame(loop);
+
+  calculateFps(timestamp);
+  renderScene();
+  renderFps();
 }
